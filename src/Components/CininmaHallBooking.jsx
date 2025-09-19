@@ -50,7 +50,7 @@ const CininmaHallBooking = ({
     return seats;
   }, [layout, seatTypes, bookedSeats]);
 
-  const [seats, setSeats] = useState([initializedSeats]);
+  const [seats, setSeats] = useState(initializedSeats);
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4 ">
       {/* title */}
