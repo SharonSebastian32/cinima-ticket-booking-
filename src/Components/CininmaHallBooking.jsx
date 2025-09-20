@@ -1,6 +1,4 @@
-import React, { useMemo } from "react";
-import { useEffect } from "react";
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 const CininmaHallBooking = ({
   layout = { rows: 8, seatsPerRow: 12, aislePosition: 5 },
@@ -40,6 +38,7 @@ const CininmaHallBooking = ({
     "pink",
     "gray",
   ];
+
   const getColorClass = (colorName) => {
     const colorMap = {
       blue: "bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200",
@@ -56,6 +55,7 @@ const CininmaHallBooking = ({
     };
     return colorMap[colorName] || colorMap.blue;
   };
+
   const getSeatTypesForRow = (row) => {
     const seatTypeEntries = Object.entries(seatTypes);
     for (let i = 0; i < seatTypeEntries.length; i++) {
@@ -68,6 +68,7 @@ const CininmaHallBooking = ({
     const [firstType, firstConfig] = seatTypeEntries[0];
     return { type: firstType, color: colors[0], ...firstConfig };
   };
+
   const initializedSeats = useMemo(() => {
     const seats = [];
     for (let row = 0; row < layout.rows; row++) {
@@ -77,10 +78,14 @@ const CininmaHallBooking = ({
         const seatId = `${String.fromCharCode(65 + row)}${seat + 1}`;
         seatRow.push({
           id: seatId,
-          row,
-          seat,
+          // internal indexes (0-based) for array access:
+          rowIndex: row,
+          seatIndex: seat,
+          // friendly/display numbers (1-based):
+          rowNumber: row + 1,
+          seatNumber: seat + 1,
           type: seatTypeInfo?.type || "regular",
-          price: seatTypeInfo?.price || "150",
+          price: Number(seatTypeInfo?.price ?? 150),
           color: seatTypeInfo?.color || "blue",
           status: bookedSeats?.includes(seatId) ? "booked" : "available",
           selected: false,
@@ -90,34 +95,40 @@ const CininmaHallBooking = ({
     }
     return seats;
   }, [layout, seatTypes, bookedSeats]);
+
   const [seats, setSeats] = useState(initializedSeats);
   const [selectedSeats, setSelectedSeats] = useState([]);
+
   const getSeatClassName = (seat) => {
-    const baseClass = `w-8 h-8 sm:w-10 lg:w-12 lg:h-12 m-1 rounded-t-lg border-2 cursor-pointer transition-all duration-200 flex items-center justify-center text:xs sm:text-sm font-bold bg-blue-100 border-blue-300 text-blue-800`;
+    const baseClass =
+      "w-8 h-8 sm:w-10 lg:w-12 lg:h-12 m-1 rounded-t-lg border-2 cursor-pointer transition-all duration-200 flex items-center justify-center text-xs sm:text-sm font-bold";
     if (seat.status === "booked") {
-      return `${baseClass} bg-gray-400 border-gray-600 text-gray-100 cursor-not-allowed`; // ✅ Fixed
+      return `${baseClass} bg-gray-400 border-gray-600 text-gray-100 cursor-not-allowed`; // booked
     }
     if (seat.selected) {
-      return `${baseClass} border-green-600 bg-green-500 text-gray-600 text-white transform scale-110`;
+      return `${baseClass} border-green-600 bg-green-500 text-white transform scale-110`;
     }
     return `${baseClass} ${getColorClass(seat.color)}`;
   };
-  const renderSeatSelection = (seatRow, startIndex, endIndex) => {
+
+  // updated signature: pass rowIndex explicitly (0-based)
+  const renderSeatSelection = (seatRow, rowIndex, startIndex, endIndex) => {
     return (
       <div className="flex items-center">
         {seatRow.slice(startIndex, endIndex).map((seat, index) => {
+          const actualSeatIndex = startIndex + index;
           return (
             <div
               key={seat.id}
               className={getSeatClassName(seat)}
               title={`${seat.id} - ${
-                getSeatTypesForRow(seat.row)?.name || "Regular"
-              }- ${seat.price} ${currency}`}
+                getSeatTypesForRow(seat.rowIndex)?.name || "Regular"
+              } - ${seat.price} ${currency}`}
               onClick={() => {
-                handleSeatClick(seat.row, startIndex + index);
+                handleSeatClick(rowIndex, actualSeatIndex);
               }}
             >
-              {startIndex + index + 1}
+              {seat.seatNumber}
             </div>
           );
         })}
@@ -127,8 +138,11 @@ const CininmaHallBooking = ({
 
   const handleSeatClick = (rowIndex, seatIndex) => {
     const seat = seats[rowIndex][seatIndex];
-    if (seat.status === "booked") return;
+    if (!seat || seat.status === "booked") return;
+
     const isCurrentlySelected = seat.selected;
+
+    // toggle selection in seats grid
     setSeats((prevSeats) =>
       prevSeats.map((row, rIdx) =>
         row.map((s, sIdx) => {
@@ -140,11 +154,22 @@ const CininmaHallBooking = ({
       )
     );
 
+    // update selectedSeats list (store friendly values)
     setSelectedSeats((prev) => {
       if (isCurrentlySelected) {
         return prev.filter((s) => s.id !== seat.id);
       } else {
-        return [...prev, { ...seat, selected: true }];
+        // push a copy with display-friendly fields
+        return [
+          ...prev,
+          {
+            id: seat.id,
+            row: seat.rowNumber,
+            seat: seat.seatNumber,
+            price: seat.price,
+            type: seat.type,
+          },
+        ];
       }
     });
   };
@@ -159,21 +184,13 @@ const CininmaHallBooking = ({
     }
   );
 
-  // const getTotalPrice = () => {
-  //   let totalPrice = 0;
-  //   selectedSeats.forEach((seat) => {
-  //     const seatTypeInfo = getSeatTypesForRow(seat.row);
-  //     totalPrice += parseFloat(seatTypeInfo.price);
-  //   });
-  //   return totalPrice;
-
-  // };
-
   const getTotalPrice = () => {
-    return selectedSeats.reduce((total, seat) => total + seat.price, 0);
+    return selectedSeats.reduce((total, seat) => total + Number(seat.price), 0);
   };
 
   const handleBooking = () => {
+    if (selectedSeats.length === 0) return;
+
     window.alert("Booking confirmed: " + JSON.stringify(selectedSeats));
 
     setSeats((prevSeats) => {
@@ -191,46 +208,48 @@ const CininmaHallBooking = ({
       seats: selectedSeats,
       totalPrice: getTotalPrice(),
       seatIds: selectedSeats.map((seat) => seat.id),
+      status: "booked",
     });
 
     alert(
       `Successfully Booked ${
         selectedSeats.length
-      } seat(s) for ${currency} ${getTotalPrice()}`
+      } seat(s) for ${currency} ${getTotalPrice().toFixed(2)}`
     );
 
     setSelectedSeats([]);
   };
 
+  console.log("selectedSeats", selectedSeats);
+
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4 ">
-      {/* title */}
-      <div className="max-w-6xl  mx-auto bg-white rounded-lg shadow-lg p-6">
+      <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-lg p-6">
         <h1 className="text-2xl lg:text-3xl font-bold text-center mb-2 text-gray-800">
           {title}
         </h1>
         <p className="text-center text-gray-600 mb-6">{subTitle}</p>
-        {/* screen */}
+
         <div className="mb-8">
           <div className="w-full h-4 bg-gradient-to-r from-gray-300 via-gray-400 to-gray-300 mb-2 shadow-inner rounded-2xl" />
           <p className="text-center text-sm text-gray-500 font-medium ">
             Screen
           </p>
         </div>
-        {/* seat map */}
+
         <div className="mb-6 overflow-x-auto ">
           <div className="flex flex-col items-center min-w-max">
             {seats.map((row, rowIndex) => {
               return (
                 <div className="flex items-center mb-2" key={rowIndex}>
                   <span className="w-8 text-center font-bold text-gray-600 mr-4">
-                    {String.fromCharCode(65 + rowIndex)}
+                    {String.fromCharCode(65 + rowIndex)} {/* A, B, C... */}
                   </span>
-                  {renderSeatSelection(row, 0, layout.aislePosition)}
-                  {/* isleOptions */}
-                  <div className="w-8"></div>
+                  {renderSeatSelection(row, rowIndex, 0, layout.aislePosition)}
+                  <div className="w-8" />
                   {renderSeatSelection(
                     row,
+                    rowIndex,
                     layout.aislePosition,
                     layout.seatsPerRow
                   )}
@@ -239,16 +258,15 @@ const CininmaHallBooking = ({
             })}
           </div>
         </div>
-        {/* legend */}
+
         <div className="flex flex-wrap justify-center gap-6 mb-6 p-4 bg-gray-50 rounded-lg">
-          {uniqueSeatTypes.map((seatType, index) => {
+          {uniqueSeatTypes.map((seatType) => {
             return (
               <div className="items-center flex" key={seatType.type}>
                 <div
-                  className={`w-6 h-6 border-2 rounded-t-lg mr-2 ${
-                    getColorClass(seatType.color) ||
-                    "border-blue-300 bg-blue-1000 "
-                  }`}
+                  className={`w-6 h-6 border-2 rounded-t-lg mr-2 ${getColorClass(
+                    seatType.color
+                  )}`}
                 ></div>
                 <span className="text-sm">
                   {seatType.name} {currency} ({seatType.price})
@@ -256,25 +274,21 @@ const CininmaHallBooking = ({
               </div>
             );
           })}
-          <div
-            className="flex items-center
-          "
-          >
+
+          <div className="flex items-center">
             <div className="w-6 h-6 bg-green-500 border-2 border-green-600 rounded-t-lg mr-2"></div>
             <span className="text-sm">Selected</span>
           </div>
-          <div
-            className="flex items-center
-          "
-          >
+
+          <div className="flex items-center">
             <div className="w-6 h-6 bg-gray-500 border-2 border-gray-600 rounded-t-lg mr-2"></div>
             <span className="text-sm">Booked</span>
           </div>
         </div>
-        {/* summary */}
-        <div className="bg-gray-500 m-4 p-4 rounded-lg"></div>
-        <div className="font-bold text-lg mb-2">Booking Summary</div>{" "}
-        {setSelectedSeats.length > 0 ? (
+
+        <div className="font-bold text-lg mb-2">Booking Summary</div>
+
+        {selectedSeats.length > 0 ? (
           <div>
             <p className="mb-2">
               Selected Seats:
@@ -287,11 +301,11 @@ const CininmaHallBooking = ({
         ) : (
           <p className="text-gray-500">No Seat Selected</p>
         )}
-        {/* booking button */}
+
         {selectedSeats.length > 0 && (
           <button
             onClick={handleBooking}
-            className="w-full py-3 px-6 rounded-lg text-lg font-bold transition-all duration-200 bg-green-500 hover:bg-green-600 text-white"
+            className="w-full py-3 px-6 rounded-lg text-lg font-bold transition-all duration-200 bg-green-500 hover:bg-green-600 text-white mt-4"
           >
             Book Ticket
           </button>
